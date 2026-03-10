@@ -1,4 +1,6 @@
-# Phishing URL & DGA Detection: Báo cáo kỹ thuật
+# Phishing URL & DGA Detection
+
+Demo Video: https://www.youtube.com/watch?v=vsHU1LZXOsA
 
 ## 1. Đặt vấn đề (Problem Statement)
 
