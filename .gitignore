@@ -1,0 +1,16 @@
+venv/
+.claude/
+**__pycache__/
+
+# Reference repos (submodules/clones)
+PhiUSIIL-Phishing-URL-Detection/
+DGA-Detection-Training-Dataset/
+DGA-or-Benign/
+
+phiusiil+phishing+url+dataset.zip
+phiusiil_xgb_4rounds.json
+test.py
+
+# Large data files
+PhiUSIIL_Phishing_URL_Dataset.csv
+dga-training-data-encoded.json

@@ -1,0 +1,262 @@
+/* Link Highlighting Styles */
+.phishing-safe {
+  outline: 2px solid #10b981 !important;
+  outline-offset: 2px !important;
+  transition: outline 0.3s ease !important;
+  border-radius: 2px !important;
+}
+
+.phishing-suspicious {
+  outline: 2px solid #f59e0b !important;
+  outline-offset: 2px !important;
+  transition: outline 0.3s ease !important;
+  border-radius: 2px !important;
+  position: relative !important;
+}
+
+.phishing-malicious {
+  outline: 3px solid #ef4444 !important;
+  outline-offset: 2px !important;
+  transition: outline 0.3s ease !important;
+  border-radius: 2px !important;
+  position: relative !important;
+  animation: pulseMalicious 2s infinite !important;
+}
+
+@keyframes pulseMalicious {
+
+  0%,
+  100% {
+    outline-color: #ef4444;
+  }
+
+  50% {
+    outline-color: #dc2626;
+  }
+}
+
+.phishing-ad {
+  outline: 2px solid #ff6b00 !important;
+  outline-offset: 2px !important;
+  transition: outline 0.3s ease !important;
+  border-radius: 2px !important;
+  position: relative !important;
+  animation: pulseAd 3s infinite !important;
+}
+
+@keyframes pulseAd {
+
+  0%,
+  100% {
+    outline-color: #ff6b00;
+  }
+
+  50% {
+    outline-color: #ff8533;
+  }
+}
+
+/* Make sure images inside links also get highlighted */
+a.phishing-safe img,
+a.phishing-suspicious img,
+a.phishing-malicious img,
+a.phishing-ad img {
+  outline: inherit !important;
+  outline-offset: -2px !important;
+}
+
+/* Tooltip Styles */
+.phishing-tooltip {
+  position: absolute;
+  z-index: 999999;
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  color: #f9fafb;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  min-width: 260px;
+  max-width: 350px;
+  pointer-events: auto;
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.phishing-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #1f2937;
+}
+
+.phishing-tooltip[data-verdict="safe"] {
+  border-left: 4px solid #10b981;
+}
+
+.phishing-tooltip[data-verdict="suspicious"] {
+  border-left: 4px solid #f59e0b;
+}
+
+.phishing-tooltip[data-verdict="malicious"] {
+  border-left: 4px solid #ef4444;
+}
+
+.phishing-tooltip[data-verdict="ad"] {
+  border-left: 4px solid #ff6b00;
+}
+
+.phishing-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.phishing-tooltip-icon {
+  font-size: 18px;
+}
+
+.phishing-tooltip-score {
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.phishing-tooltip-score strong {
+  color: #f59e0b;
+  font-size: 14px;
+}
+
+.phishing-tooltip[data-verdict="safe"] .phishing-tooltip-score strong {
+  color: #10b981;
+}
+
+.phishing-tooltip[data-verdict="malicious"] .phishing-tooltip-score strong {
+  color: #ef4444;
+}
+
+.phishing-tooltip-reasons {
+  margin-bottom: 8px;
+}
+
+.phishing-tooltip-reasons strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.phishing-tooltip-reasons ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.phishing-tooltip-reasons li {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #d1d5db;
+}
+
+.phishing-tooltip-reasons p {
+  margin: 0;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.phishing-tooltip-source {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Warning icon for malicious links */
+.phishing-malicious::after {
+  content: '⚠';
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #ef4444;
+  color: white;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  animation: warningPulse 1.5s infinite;
+}
+
+@keyframes warningPulse {
+
+  0%,
+  100% {
+    transform: translateY(-50%) scale(1);
+  }
+
+  50% {
+    transform: translateY(-50%) scale(1.1);
+  }
+}
+
+/* Ad icon for advertisement links */
+.phishing-ad::after {
+  content: '📢';
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #ff6b00;
+  color: white;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  animation: adPulse 2s infinite;
+}
+
+@keyframes adPulse {
+
+  0%,
+  100% {
+    transform: translateY(-50%) scale(1);
+  }
+
+  50% {
+    transform: translateY(-50%) scale(1.05);
+  }
+}

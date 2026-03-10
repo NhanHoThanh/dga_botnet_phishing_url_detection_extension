@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phishing URL Analyzer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 380px;
+      min-height: 400px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #1f2937;
+      padding: 0;
+    }
+
+    .header {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 20px;
+      text-align: center;
+      border-bottom: 3px solid #667eea;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 4px;
+    }
+
+    .header p {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .content {
+      background: white;
+      padding: 20px;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Last Scanned URL */
+    .last-scan {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 12px;
+      border-left: 4px solid #9ca3af;
+    }
+
+    .last-scan.safe {
+      border-left-color: #10b981;
+      background: #ecfdf5;
+    }
+
+    .last-scan.suspicious {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+    }
+
+    .last-scan.malicious {
+      border-left-color: #ef4444;
+      background: #fef2f2;
+    }
+
+    .last-scan-url {
+      font-size: 12px;
+      color: #6b7280;
+      word-break: break-all;
+      margin-bottom: 8px;
+    }
+
+    .verdict-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .verdict-badge.safe {
+      background: #10b981;
+      color: white;
+    }
+
+    .verdict-badge.suspicious {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .verdict-badge.malicious {
+      background: #ef4444;
+      color: white;
+    }
+
+    .verdict-badge.none {
+      background: #e5e7eb;
+      color: #6b7280;
+    }
+
+    /* Risk Score Gauge */
+    .risk-gauge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .gauge-circle {
+      position: relative;
+      width: 120px;
+      height: 120px;
+    }
+
+    .gauge-svg {
+      transform: rotate(-90deg);
+    }
+
+    .gauge-bg {
+      fill: none;
+      stroke: #e5e7eb;
+      stroke-width: 12;
+    }
+
+    .gauge-progress {
+      fill: none;
+      stroke: #10b981;
+      stroke-width: 12;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
+    }
+
+    .gauge-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .gauge-score {
+      font-size: 32px;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .gauge-label {
+      font-size: 11px;
+      color: #6b7280;
+      text-transform: uppercase;
+    }
+
+    /* Reasons List */
+    .reasons-list {
+      list-style: none;
+    }
+
+    .reasons-list li {
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #374151;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .reasons-list li::before {
+      content: '•';
+      color: #667eea;
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .no-reasons {
+      font-size: 12px;
+      color: #9ca3af;
+      font-style: italic;
+      text-align: center;
+      padding: 12px;
+    }
+
+    /* Stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      color: white;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      opacity: 0.9;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Settings */
+    .settings-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .setting-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+
+    .setting-label {
+      font-size: 13px;
+      color: #374151;
+    }
+
+    .setting-description {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+
+    /* Toggle Switch */
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: #d1d5db;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .toggle.active {
+      background: #667eea;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .toggle.active .toggle-slider {
+      transform: translateX(20px);
+    }
+
+    /* Buttons */
+    .button {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .button-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .button-primary:hover {
+      background: #5568d3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+    }
+
+    .button-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .button-secondary:hover {
+      background: #e5e7eb;
+    }
+
+    .footer {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 12px 20px;
+      text-align: center;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .footer-text {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: #9ca3af;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .empty-state-text {
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🛡️ Phishing Analyzer</h1>
+    <p>Real-time link protection</p>
+  </div>
+
+  <div class="content">
+    <!-- Last Scanned URL -->
+    <div class="section">
+      <div class="section-title">Last Scanned Link</div>
+      <div id="lastScan" class="last-scan">
+        <div class="empty-state">
+          <div class="empty-state-icon">🔍</div>
+          <div class="empty-state-text">Hover over any link to scan for phishing</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Risk Score Gauge -->
+    <div class="section" id="gaugeSection" style="display: none;">
+      <div class="section-title">Risk Assessment</div>
+      <div class="risk-gauge">
+        <div class="gauge-circle">
+          <svg class="gauge-svg" width="120" height="120">
+            <circle class="gauge-bg" cx="60" cy="60" r="54"></circle>
+            <circle id="gaugeProgress" class="gauge-progress" cx="60" cy="60" r="54"
+                    stroke-dasharray="339.292" stroke-dashoffset="339.292"></circle>
+          </svg>
+          <div class="gauge-text">
+            <div id="gaugeScore" class="gauge-score">0</div>
+            <div class="gauge-label">Risk Score</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reasons -->
+    <div class="section" id="reasonsSection" style="display: none;">
+      <div class="section-title">Detection Signals</div>
+      <ul id="reasonsList" class="reasons-list"></ul>
+    </div>
+
+    <!-- Stats -->
+    <div class="section">
+      <div class="section-title">Statistics</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div id="totalScans" class="stat-value">0</div>
+          <div class="stat-label">Total Scans</div>
+        </div>
+        <div class="stat-card">
+          <div id="threatsBlocked" class="stat-value">0</div>
+          <div class="stat-label">Threats Blocked</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="section">
+      <div class="section-title">Settings</div>
+      <div class="settings-list">
+        <div class="setting-item">
+          <div>
+            <div class="setting-label">Full Analysis</div>
+            <div class="setting-description">Use backend for deep scanning</div>
+          </div>
+          <div id="toggleFullAnalysis" class="toggle active">
+            <div class="toggle-slider"></div>
+          </div>
+        </div>
+        <div class="setting-item">
+          <div>
+            <div class="setting-label">Auto-Scan Ads</div>
+            <div class="setting-description">Automatically check advertisements</div>
+          </div>
+          <div id="toggleAutoScanAds" class="toggle active">
+            <div class="toggle-slider"></div>
+          </div>
+        </div>
+        <div class="setting-item">
+          <div>
+            <div class="setting-label">Fast Mode Only</div>
+            <div class="setting-description">Skip backend, use client-side only</div>
+          </div>
+          <div id="toggleFastOnly" class="toggle">
+            <div class="toggle-slider"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-text">Protected by AI-powered phishing detection</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
