@@ -297,7 +297,7 @@ Mô hình DGA sử dụng **71 đặc trưng**:
 
 ## 3. Kiến thức liên quan
 
-### 3.1 Machine Learnin
+### 3.1 Machine Learning
 
 **Machine Learning (Học máy)** là một nhánh của Trí tuệ Nhân tạo (AI), trong đó máy tính **học từ dữ liệu** thay vì được lập trình cụ thể cho từng trường hợp.
 
@@ -779,7 +779,380 @@ Khi người dùng hover qua một link, hệ thống:
    - 30-59: **Suspicious** (Đáng nghi)
    - 60-100: **Malicious** (Độc hại)
 
-## 5. Tài liệu tham khảo (References)
+### 4.5 Phân tích SHAP (SHapley Additive exPlanations)
+
+#### SHAP là gì?
+
+SHAP là phương pháp giải thích mô hình dựa trên lý thuyết trò chơi (Shapley values, Nobel Prize 2012). Với mỗi dự đoán, SHAP tính toán **đóng góp chính xác** của từng đặc trưng vào kết quả cuối cùng.
+
+**Ý tưởng**: Nếu mô hình dự đoán trung bình là 0.5, và một URL cụ thể được dự đoán 0.92 (phishing), SHAP cho biết chính xác bao nhiêu "điểm" mà mỗi đặc trưng đẩy kết quả từ 0.5 lên 0.92:
+
+```
+Base (trung bình):        0.50
++ URLSimilarityIndex:    +0.25  (đẩy mạnh về phishing)
++ IsHTTPS = 0:           +0.09
++ TLDLegitimateProb:     +0.05
++ DomainLength:          -0.02  (đẩy nhẹ về safe)
++ ...
+= Dự đoán cuối:          0.92
+```
+
+Tổng SHAP values luôn bằng chênh lệch giữa dự đoán và giá trị trung bình — đảm bảo tính công bằng toán học.
+
+**Khác biệt với Feature Importance thông thường:**
+
+| | Feature Importance (gain) | SHAP |
+|---|---|---|
+| Phạm vi | Chỉ toàn cục | Toàn cục VÀ từng dự đoán |
+| Hướng | "Feature X quan trọng" | "Feature X = 36.8 đẩy +0.25 về phishing" |
+| Tương tác | Bỏ qua | Tính đến tương tác giữa features |
+| Đảm bảo toán học | Không | Shapley values — phân bổ công bằng duy nhất |
+
+Chúng ta sử dụng **TreeSHAP** — thuật toán tối ưu cho mô hình cây (XGBoost), tính SHAP values chính xác trong thời gian đa thức thay vì $O(2^n)$.
+
+#### Kết quả SHAP — Mô hình Phishing
+
+**Mean |SHAP| — Độ quan trọng trung bình của từng đặc trưng:**
+
+| Hạng | Đặc trưng | Mean \|SHAP\| | % Tổng |
+|---|---|---|---|
+| 1 | URLSimilarityIndex | 7.3199 | 43.7% |
+| 2 | IsHTTPS | 2.0190 | 12.1% |
+| 3 | DomainLength | 1.5999 | 9.6% |
+| 4 | LetterRatioInURL | 1.4971 | 8.9% |
+| 5 | URLCharProb | 0.6596 | 3.9% |
+| 6 | SpacialCharRatioInURL | 0.5586 | 3.3% |
+| 7 | NoOfOtherSpecialCharsInURL | 0.5513 | 3.3% |
+| 8 | Pay | 0.4748 | 2.8% |
+| 9 | NoOfLettersInURL | 0.4426 | 2.6% |
+| 10 | TLDLegitimateProb | 0.3485 | 2.1% |
+
+**So sánh SHAP vs Feature Importance (gain):**
+
+| Đặc trưng | Gain Rank | SHAP Rank | Nhận xét |
+|---|---|---|---|
+| URLSimilarityIndex | 1 (72.1%) | 1 (43.7%) | Vẫn #1, nhưng SHAP cho thấy các feature khác quan trọng hơn gain thể hiện |
+| IsHTTPS | 3 (8.2%) | **2 (12.1%)** | SHAP đánh giá cao hơn gain |
+| DomainLength | 9 (0.2%) | **3 (9.6%)** | Khác biệt lớn nhất! Gain đánh giá thấp vì DomainLength ít được dùng để split, nhưng SHAP cho thấy nó ảnh hưởng mạnh đến dự đoán |
+| LetterRatioInURL | 6 (0.4%) | **4 (8.9%)** | Tương tự — quan trọng hơn gain thể hiện |
+| NoOfDegitsInURL | 2 (10.2%) | **12 (1.6%)** | Gain cao vì split thường xuyên, nhưng SHAP cho thấy đóng góp thực sự nhỏ hơn |
+
+**Ví dụ giải thích cho 1 URL phishing:**
+
+```
+URL phishing: P(legitimate) = 0.0000
+Base value: 0.097
+
+Đặc trưng                    Giá trị      SHAP         Hướng
+─────────────────────────────────────────────────────────────
+URLSimilarityIndex           36.79        -10.218      -> phishing  (URL không khớp domain)
+DomainLength                 40.00        +1.832       -> legitimate
+NoOfOtherSpecialCharsInURL   6.00         -1.190       -> phishing  (nhiều ký tự đặc biệt)
+SpacialCharRatioInURL        0.12         -0.996       -> phishing
+NoOfDegitsInURL              11.00        -0.906       -> phishing  (nhiều chữ số)
+```
+
+URLSimilarityIndex = 36.79 (thấp) đóng góp SHAP = -10.218, đẩy mạnh về phishing. Đây là bằng chứng rõ ràng: URL không khớp với domain → rất khả nghi.
+
+**Ví dụ giải thích cho 1 URL hợp pháp:**
+
+```
+URL hợp pháp: P(legitimate) = 0.9999
+Base value: 0.097
+
+Đặc trưng                    Giá trị      SHAP         Hướng
+─────────────────────────────────────────────────────────────
+URLSimilarityIndex           100.00       +6.604       -> legitimate (URL khớp hoàn toàn)
+DomainLength                 18.00        -2.858       -> phishing
+LetterRatioInURL             0.48         +1.994       -> legitimate (tỉ lệ chữ cái bình thường)
+IsHTTPS                      1.00         +1.058       -> legitimate (có HTTPS)
+URLCharProb                  0.064        +0.693       -> legitimate
+```
+
+#### Kết quả SHAP — Mô hình DGA
+
+**SHAP theo nhóm đặc trưng:**
+
+| Nhóm | Mean \|SHAP\| tổng | % Tổng |
+|---|---|---|
+| Mã hóa ký tự (64 features) | 5.8602 | **70.4%** |
+| Đặc trưng thống kê (7 features) | 2.4662 | 29.6% |
+
+So sánh với Feature Importance (gain): gain cho thấy char encoding = 51% và stats = 49% (gần bằng nhau). Nhưng SHAP tiết lộ rằng **char encoding thực sự quan trọng hơn nhiều** (70.4% vs 29.6%). Gain đánh giá cao các statistical features vì chúng được dùng nhiều để split, nhưng đóng góp thực sự vào dự đoán nhỏ hơn.
+
+**Đặc trưng thống kê xếp hạng theo SHAP:**
+
+| Hạng | Đặc trưng | Mean \|SHAP\| | % trong nhóm |
+|---|---|---|---|
+| 1 | consonants_consec | 1.1896 | 48.2% |
+| 2 | vowel_ratio | 0.5053 | 20.5% |
+| 3 | digits | 0.3454 | 14.0% |
+| 4 | length | 0.1965 | 8.0% |
+| 5 | entropy | 0.1740 | 7.1% |
+| 6 | unique_chars | 0.0554 | 2.2% |
+| 7 | capitals | 0.0000 | 0.0% |
+
+**Top 5 vị trí ký tự quan trọng nhất:**
+
+| Hạng | Vị trí | Mean \|SHAP\| | Ý nghĩa |
+|---|---|---|---|
+| 1 | char_63 (cuối cùng) | 0.5649 | Ký tự cuối domain |
+| 2 | char_62 (thứ 2 từ cuối) | 0.4989 | |
+| 3 | char_58 (thứ 6 từ cuối) | 0.4839 | |
+| 4 | char_61 (thứ 3 từ cuối) | 0.4734 | |
+| 5 | char_60 (thứ 4 từ cuối) | 0.4368 | |
+
+Các ký tự cuối domain quan trọng nhất — phù hợp với trực giác vì DGA thường tạo ra các phần đuôi ngẫu nhiên, trong khi tên miền benign có các hậu tố có ý nghĩa (ví dụ: "records", "shop", "online").
+
+**Ví dụ giải thích cho 1 DGA domain:**
+
+```
+Domain: 'scdyjmtdeflu'    P(DGA) = 0.9920
+
+Đặc trưng              Giá trị      SHAP         Hướng
+────────────────────────────────────────────────────────
+consonants_consec      8.00         +2.845       -> DGA  (8 phụ âm liên tiếp!)
+vowel_ratio            0.17         +0.943       -> DGA  (chỉ 17% nguyên âm)
+length                 12.00        +0.040       -> DGA
+entropy                3.42         +0.034       -> DGA
+unique_chars           11.00        +0.025       -> DGA
+```
+
+Domain "scdyjmtdeflu" có 8 phụ âm liên tiếp (scdyjmtd) và chỉ 17% nguyên âm → SHAP xác nhận đây là các tín hiệu DGA mạnh nhất.
+
+**Ví dụ giải thích cho 1 domain hợp pháp:**
+
+```
+Domain: 'newmillenniumrecords'    P(DGA) = 0.0006
+
+Đặc trưng              Giá trị      SHAP         Hướng
+────────────────────────────────────────────────────────
+consonants_consec      3.00         -0.705       -> benign (phụ âm ngắn, đọc được)
+vowel_ratio            0.35         -0.503       -> benign (35% nguyên âm — ngôn ngữ tự nhiên)
+digits                 0.00         -0.109       -> benign (không có chữ số)
+entropy                3.45         -0.109       -> benign
+length                 20.00        +0.057       -> DGA   (hơi dài)
+```
+
+---
+
+## 5. Kiến trúc Chrome Extension
+
+### 5.1 Tổng quan
+
+Extension sử dụng kiến trúc **Manifest V3** của Chrome, bao gồm 3 thành phần chính chạy trong các ngữ cảnh (context) tách biệt:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Chrome Browser                           │
+│                                                              │
+│  ┌──────────────────┐    ┌─────────────────────────────────┐│
+│  │  Service Worker   │    │        Web Page Context         ││
+│  │  (background.js)  │    │                                 ││
+│  │                    │    │  browser-polyfill.js            ││
+│  │  - API calls       │◄──►  fast-detector.js               ││
+│  │  - Caching         │    │  content.js                    ││
+│  │  - Rate limiting   │    │  styles.css                    ││
+│  │  - Context menu    │    │                                 ││
+│  └──────────────────┘    └─────────────────────────────────┘│
+│           ▲                                                  │
+│           │                                                  │
+│  ┌──────────────────┐                                       │
+│  │  Popup UI         │                                       │
+│  │  (popup.html/js)  │                                       │
+│  │  - Settings        │                                       │
+│  │  - Statistics      │                                       │
+│  │  - Last scan       │                                       │
+│  └──────────────────┘                                       │
+└─────────────────────────────────────────────────────────────┘
+           │
+           ▼
+   ┌──────────────┐
+   │ FastAPI       │
+   │ Backend       │
+   │ localhost:8000│
+   └──────────────┘
+```
+
+### 5.2 Cấu trúc file
+
+```
+Phishing-link-detection-extension/
+├── manifest.json          # Cấu hình extension (Manifest V3)
+├── browser-polyfill.js    # Tương thích đa trình duyệt (Chrome/Edge/Brave/Opera)
+├── fast-detector.js       # Engine phân tích heuristic phía client (Tier 1)
+├── content.js             # Scanner trang web + giao diện trực quan
+├── background.js          # Service worker (cầu nối với backend API)
+├── popup.html + popup.js  # Giao diện popup của extension
+├── styles.css             # CSS cho highlight và tooltip
+└── icons/                 # Icon extension
+```
+
+### 5.3 manifest.json — Điểm vào (Entry Point)
+
+File cấu hình duy nhất **bắt buộc** của mọi Chrome Extension. Khai báo:
+
+- **Content scripts** được inject vào mọi trang web theo thứ tự: `browser-polyfill.js` -> `fast-detector.js` -> `content.js` (cùng `styles.css`). Thứ tự quan trọng vì `content.js` gọi `window.FastDetector` từ `fast-detector.js`.
+- **Service worker**: `background.js` — chạy nền, không có quyền truy cập DOM.
+- **Popup**: `popup.html` — hiển thị khi click icon extension.
+- **Permissions**: `activeTab`, `scripting`, `contextMenus`, `storage`, `<all_urls>`.
+- **run_at**: `document_idle` — scripts chỉ chạy sau khi trang web đã tải xong.
+
+### 5.4 Luồng thực thi (Execution Flow)
+
+#### Khởi tạo
+
+Khi người dùng mở một trang web, Chrome inject 3 file JS vào trang:
+
+```
+1. browser-polyfill.js  → Chuẩn hóa API trình duyệt (chrome.* vs browser.*)
+2. fast-detector.js     → Đăng ký window.FastDetector (engine phân tích nhanh)
+3. content.js           → Chạy initialize():
+   ├─ Kiểm tra FastDetector đã load? (nếu chưa, retry sau 500ms)
+   ├─ Load settings từ chrome.storage.sync
+   ├─ attachLinkListeners() — gắn event listeners cho mọi <a href> và clickable elements
+   ├─ observeDOMChanges() — MutationObserver theo dõi link mới (SPA, infinite scroll)
+   ├─ document.addEventListener('click', handleGlobalClick, true) — catch-all
+   └─ scanAdsOnPage() — quét container quảng cáo
+```
+
+#### Khi người dùng hover qua link
+
+```
+mouseenter event fires
+       │
+       ▼
+handleLinkHover() — debounce 200ms
+       │
+       ▼
+analyzeElement(element)
+       │
+       ├─ 1. checkBlocklist(url)
+       │     └─ Khớp blocklist? → highlight đỏ, DỪNG
+       │
+       ├─ 2. Cache check: State.analyzedLinks.has(url)?
+       │     └─ Có? → hiển thị kết quả cached, DỪNG
+       │
+       ├─ 3. FastDetector.analyze(url)           ← TIER 1 (tức thì, phía client)
+       │     ├─ Blocklist check
+       │     ├─ Trusted domain check
+       │     ├─ 8 heuristic checks (keywords, TLD, IP, entropy, typosquatting...)
+       │     └─ Return {quick_score, quick_verdict, reasons}
+       │
+       ├─ 4. applyVisualFeedback() — highlight link ngay lập tức
+       │
+       └─ 5. score >= 30 AND fullAnalysis?
+              │
+              ▼
+       requestDeepAnalysis(url)                  ← TIER 2 (backend XGBoost)
+              │
+              ├─ chrome.runtime.sendMessage({type: 'DEEP_ANALYSIS', url})
+              │         │
+              │         ▼
+              │   background.js
+              │   ├─ Cache check
+              │   ├─ Rate limit check (max 10 req/phút)
+              │   └─ POST /analyze → FastAPI backend
+              │         ├─ Phishing model (25 features)
+              │         ├─ DGA model (71 features)
+              │         └─ Kết hợp → {verdict, risk_score, reasons}
+              │
+              └─ Cập nhật highlight với kết quả backend
+```
+
+#### Khi người dùng click link
+
+Có **hai** handler click hoạt động song song:
+
+**handleMonitoredClick()** — gắn trực tiếp vào mỗi link đã được theo dõi (capture phase):
+```
+Click → kiểm tra blocklist + cache
+     └─ Kết quả "malicious"?
+        ├─ CÓ → Hiện confirm() dialog cảnh báo
+        │        ├─ Hủy → preventDefault(), chặn điều hướng
+        │        └─ Tiếp tục → cho phép điều hướng
+        └─ KHÔNG → cho phép điều hướng
+```
+
+**handleGlobalClick()** — catch-all trên document cho các element chưa được theo dõi:
+```
+Click → element đã có listener? → bỏ qua (đã xử lý ở trên)
+     └─ Chưa có → FastDetector.analyze() ngay lập tức
+        └─ score >= 60 → confirm() dialog, chặn nếu cần
+```
+
+### 5.5 Các thành phần chi tiết
+
+#### fast-detector.js — Engine phân tích Tier 1
+
+Object `FastDetector` chạy hoàn toàn phía client (không gọi mạng). Hàm chính: `FastDetector.analyze(url)`.
+
+**Pipeline phân tích (theo thứ tự):**
+
+1. **Blocklist check** — danh sách domain bị chặn (ví dụ: `fb88.com`). Kiểm tra cả hostname và full URL (bắt domain ẩn trong redirect URL).
+2. **Trusted domain check** — whitelist domain an toàn (google.com, github.com...). Nếu khớp → trả về safe ngay.
+3. **8 heuristic checks**, mỗi check trả về score (0-100) và lý do:
+
+| Check | Phát hiện | Điểm |
+|---|---|---|
+| checkKeywords | Từ khóa phishing: "login", "verify", "password"... | +8/từ khóa |
+| checkTLD | TLD đáng nghi: `.tk`, `.ml`, `.zip`... | +25 |
+| checkObfuscation | Quá nhiều dấu gạch ngang/chấm trong hostname | +10-15 |
+| checkIPAddress | Domain là địa chỉ IP thay vì tên miền | +30 |
+| checkPunycode | Tấn công homograph (xn-- domains) | +20-25 |
+| checkLength | URL dài bất thường (>75 ký tự) | +1-15 |
+| checkEntropy | Shannon entropy cao (chuỗi ngẫu nhiên kiểu DGA) | +1-20 |
+| checkTyposquatting | Khoảng cách Levenshtein gần brand phổ biến | +35 |
+
+**Scoring**: tổng điểm (cap 100). Ngưỡng phán định: `<30` Safe, `30-59` Suspicious, `>=60` Malicious.
+
+#### background.js — Service Worker (cầu nối Backend)
+
+Chạy liên tục trong nền. Chức năng:
+
+- **API communication**: `callBackendAPI(url)` → POST /analyze đến FastAPI, timeout 10 giây
+- **Rate limiting**: Tối đa 10 request/phút, chặn nếu vượt giới hạn
+- **Caching**: In-memory Map + persist xuống `chrome.storage.local`, TTL 24 giờ, dọn dẹp mỗi giờ
+- **Context menu**: Click phải → "Analyze this link for phishing"
+- **Message routing**: Nhận message từ content.js (DEEP_ANALYSIS, CACHE_RESULT) và popup.js (GET_STATS, UPDATE_BACKEND_URL, CLEAR_CACHE)
+
+#### content.js — Scanner trang web
+
+File lớn nhất, điều phối toàn bộ hoạt động trên trang web:
+
+- **Khởi tạo**: Gắn listener cho mọi `<a href>`, `[onclick]`, `[data-href]`, `div[class*="ad"]`...
+- **MutationObserver**: Theo dõi DOM để bắt link mới được thêm động (SPA, AJAX)
+- **Visual feedback**: Thêm CSS class vào link (xanh/vàng/đỏ/cam) + tooltip floating
+- **Click interception**: Chặn điều hướng đến link malicious bằng confirm dialog
+- **Ad scanning**: Tự động quét container quảng cáo (#tads, .adsbygoogle...)
+
+#### popup.html + popup.js — Giao diện Extension
+
+Hiển thị khi click icon:
+- **Last scan**: URL và verdict gần nhất
+- **Risk gauge**: Vòng tròn SVG hiển thị điểm 0-100
+- **Signals**: Danh sách lý do phát hiện
+- **Statistics**: Tổng scans, threats blocked
+- **Settings**: Full Analysis on/off, Auto-Scan Ads, Fast Mode Only
+
+Settings được đồng bộ qua `chrome.storage.sync` và broadcast đến tất cả tab.
+
+### 5.6 Giao diện trực quan (Visual Feedback)
+
+CSS được inject vào mọi trang web. Khi link được phân tích:
+
+| Verdict | Hiển thị | Hành vi |
+|---|---|---|
+| **Safe** | Viền xanh lá (`#10b981`) | Tự biến mất sau 3 giây |
+| **Suspicious** | Viền vàng (`#f59e0b`) | Giữ nguyên |
+| **Malicious** | Viền đỏ nhấp nháy (`#ef4444`) + icon cảnh báo | Giữ nguyên + chặn click |
+| **Ad** | Viền cam (`#ff6b00`) + icon loa | Giữ nguyên |
+
+Tooltip dark theme xuất hiện phía trên link khi hover, hiển thị: icon verdict, risk score, lý do phát hiện, và nguồn phân tích (Quick scan / Backend verified).
+
+---
+
+## 6. Tài liệu tham khảo (References)
 
 ### Dữ liệu
 
@@ -821,4 +1194,8 @@ Khi người dùng hover qua một link, hệ thống:
 
 15. scikit-learn Documentation. https://scikit-learn.org/stable/
 
+16. Scott M. Lundberg, Su-In Lee. "A Unified Approach to Interpreting Model Predictions." *Advances in Neural Information Processing Systems 30 (NeurIPS)*, 2017. https://papers.nips.cc/paper/7062-a-unified-approach-to-interpreting-model-predictions
 
+17. SHAP Documentation. https://shap.readthedocs.io/
+
+18. Chrome Extensions Manifest V3 Documentation. https://developer.chrome.com/docs/extensions/mv3/
