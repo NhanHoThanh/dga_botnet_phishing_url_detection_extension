@@ -11,6 +11,11 @@ phiusiil+phishing+url+dataset.zip
 phiusiil_xgb_4rounds.json
 test.py
 
+# Binary/archive files
+*.rar
+*.zip
+*.docx
+
 # Large data files
 PhiUSIIL_Phishing_URL_Dataset.csv
 dga-training-data-encoded.json

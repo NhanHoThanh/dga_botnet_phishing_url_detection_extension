@@ -84,12 +84,31 @@ class AnalyzeRequest(BaseModel):
     url: str
 
 
+class ModelResult(BaseModel):
+    score: float
+    probability: float
+    verdict: str
+    reasons: list[str]
+
+
 class AnalyzeResponse(BaseModel):
     verdict: str
     risk_score: int
     reasons: list[str]
     confidence: float
+    phishing: ModelResult
+    dga: ModelResult
     metadata: dict
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _verdict_from_score(score: float) -> str:
+    if score < 30:
+        return "Safe"
+    elif score < 60:
+        return "Suspicious"
+    return "Malicious"
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -118,6 +137,8 @@ def analyze(request: AnalyzeRequest):
     reasons = []
     phishing_prob = 0.0
     dga_prob = 0.0
+    phishing_reasons: list[str] = []
+    dga_reasons: list[str] = []
 
     # ── Run phishing model ────────────────────────────────────────────────
     if phishing_model is not None and phishing_extractor is not None:
@@ -127,9 +148,11 @@ def analyze(request: AnalyzeRequest):
         phishing_prob = float(probs[0])  # class 0 = phishing
 
         if phishing_prob > 0.7:
-            reasons.append(f"ML phishing classifier: {phishing_prob:.0%} phishing probability")
+            phishing_reasons.append(f"ML phishing classifier: {phishing_prob:.0%} phishing probability")
         elif phishing_prob > 0.4:
-            reasons.append(f"ML phishing classifier: moderately suspicious ({phishing_prob:.0%})")
+            phishing_reasons.append(f"ML phishing classifier: moderately suspicious ({phishing_prob:.0%})")
+        else:
+            phishing_reasons.append("URL appears safe based on phishing analysis")
 
     # ── Run DGA model ─────────────────────────────────────────────────────
     if dga_model is not None and domain:
@@ -138,31 +161,40 @@ def analyze(request: AnalyzeRequest):
         dga_prob = float(dga_probs[1])  # class 1 = DGA
 
         if dga_prob > 0.7:
-            reasons.append(f"Domain appears algorithmically generated (DGA score: {dga_prob:.0%})")
+            dga_reasons.append(f"Domain appears algorithmically generated (DGA score: {dga_prob:.0%})")
         elif dga_prob > 0.4:
-            reasons.append(f"Domain has some DGA-like characteristics ({dga_prob:.0%})")
+            dga_reasons.append(f"Domain has some DGA-like characteristics ({dga_prob:.0%})")
+        else:
+            dga_reasons.append("Domain appears to be human-generated")
+
+    # ── Individual model results ──────────────────────────────────────────
+    phishing_score = phishing_prob * 100
+    dga_score = dga_prob * 100
+
+    phishing_result = ModelResult(
+        score=round(phishing_score, 1),
+        probability=round(phishing_prob, 4),
+        verdict=_verdict_from_score(phishing_score),
+        reasons=phishing_reasons,
+    )
+    dga_result = ModelResult(
+        score=round(dga_score, 1),
+        probability=round(dga_prob, 4),
+        verdict=_verdict_from_score(dga_score),
+        reasons=dga_reasons,
+    )
 
     # ── Combine into final score ──────────────────────────────────────────
-    # Phishing probability is the primary signal, DGA is secondary
-    phishing_score = phishing_prob * 100
-    dga_score = dga_prob * 80  # DGA maxes at 80 contribution
+    # Phishing probability is the primary signal, DGA is secondary (capped at 80)
+    combined_dga_score = dga_prob * 80
+    risk_score = int(min(100, max(phishing_score, combined_dga_score)))
 
-    risk_score = int(min(100, max(phishing_score, dga_score)))
-
-    # Add contextual reasons
+    # Collect all reasons
+    reasons = phishing_reasons + dga_reasons
     if not reasons:
-        if risk_score < 30:
-            reasons.append("URL appears safe based on ML analysis")
-        else:
-            reasons.append("Elevated risk detected by ML models")
+        reasons.append("URL appears safe based on ML analysis")
 
-    # Determine verdict
-    if risk_score < 30:
-        verdict = "Safe"
-    elif risk_score < 60:
-        verdict = "Suspicious"
-    else:
-        verdict = "Malicious"
+    verdict = _verdict_from_score(risk_score)
 
     # Confidence: higher when models agree, lower when they diverge
     if phishing_model is not None and dga_model is not None:
@@ -179,9 +211,11 @@ def analyze(request: AnalyzeRequest):
         risk_score=risk_score,
         reasons=reasons,
         confidence=round(confidence, 3),
+        phishing=phishing_result,
+        dga=dga_result,
         metadata={
-            "phishing_score": round(phishing_prob * 100, 1),
-            "dga_score": round(dga_prob * 100, 1),
+            "phishing_score": round(phishing_score, 1),
+            "dga_score": round(dga_score, 1),
             "domain": registered_domain,
             "tld": tld,
         },
