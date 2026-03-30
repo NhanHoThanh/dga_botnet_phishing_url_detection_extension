@@ -1,5 +1,7 @@
 venv/
 .claude/
+.DS_Store
+slides/
 **__pycache__/
 
 # Reference repos (submodules/clones)
