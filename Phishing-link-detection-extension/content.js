@@ -450,25 +450,21 @@ async function analyzeElement(element, forceDeep = false) {
 }
 
 /**
- * Request deep analysis from backend via background service worker
+ * Request deep analysis directly from backend (bypasses background message round-trip).
  * @param {string} url - URL to analyze
  * @returns {Promise<object>} Analysis result from backend
  */
-function requestDeepAnalysis(url) {
-    return new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage({
-            type: 'DEEP_ANALYSIS',
-            url: url
-        }, (response) => {
-            if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError);
-            } else if (response && response.success) {
-                resolve(response.data);
-            } else {
-                reject(new Error(response?.error || 'Unknown error'));
-            }
-        });
+async function requestDeepAnalysis(url) {
+    const response = await fetch('http://localhost:8000/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(15000)
     });
+    if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+    }
+    return response.json();
 }
 
 /**
