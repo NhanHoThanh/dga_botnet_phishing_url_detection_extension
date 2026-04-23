@@ -152,8 +152,13 @@ def _check_server_blocklist(url: str, domain: str) -> dict | None:
     if blocklist is None:
         return None
 
-    blocked_domains = blocklist.get('blocked_domains', [])
+    raw_domains = blocklist.get('blocked_domains', [])
     blocked_patterns = blocklist.get('blocked_patterns', [])
+
+    # Strip scheme and trailing slashes so entries like "https://example.com/" still match
+    blocked_domains = [
+        d.split('://', 1)[-1].strip('/') for d in raw_domains
+    ]
 
     # Exact domain match
     if domain in blocked_domains:
