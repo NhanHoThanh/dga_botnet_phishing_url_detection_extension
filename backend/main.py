@@ -193,6 +193,8 @@ def analyze(request: AnalyzeRequest):
     if not url:
         raise HTTPException(status_code=400, detail={"error": "MISSING_URL"})
 
+    logger.info(url)
+
     # Extract domain info
     ext = tldextract.extract(url)
     domain = ext.domain or ""

@@ -368,6 +368,8 @@ async function analyzeElement(element, forceDeep = false) {
 
     if (!url) return;
 
+    console.log(url);
+
     // Check cache
     if (State.analyzedLinks.has(url)) {
         const cached = State.analyzedLinks.get(url);
