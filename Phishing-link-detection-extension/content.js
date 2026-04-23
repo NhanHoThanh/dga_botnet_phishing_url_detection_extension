@@ -450,21 +450,28 @@ async function analyzeElement(element, forceDeep = false) {
 }
 
 /**
- * Request deep analysis directly from backend (bypasses background message round-trip).
+ * Request deep analysis via a long-lived port to keep the service worker
+ * alive until the fetch completes (avoids MV3 port-closed race condition).
+ * Routes through background to bypass Chrome's Private Network Access block.
  * @param {string} url - URL to analyze
  * @returns {Promise<object>} Analysis result from backend
  */
-async function requestDeepAnalysis(url) {
-    const response = await fetch('http://localhost:8000/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-        signal: AbortSignal.timeout(15000)
+function requestDeepAnalysis(url) {
+    return new Promise((resolve, reject) => {
+        const port = chrome.runtime.connect({ name: 'deep_analysis' });
+        port.onMessage.addListener((response) => {
+            port.disconnect();
+            if (response.success) {
+                resolve(response.data);
+            } else {
+                reject(new Error(response.error || 'Unknown error'));
+            }
+        });
+        port.onDisconnect.addListener(() => {
+            reject(new Error(chrome.runtime.lastError?.message || 'Port disconnected'));
+        });
+        port.postMessage({ type: 'DEEP_ANALYSIS', url });
     });
-    if (!response.ok) {
-        throw new Error(`Backend returned ${response.status}`);
-    }
-    return response.json();
 }
 
 /**

@@ -81,14 +81,42 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 });
 
 /**
- * Handle messages from content scripts and popup
+ * Handle long-lived port connections (used for DEEP_ANALYSIS to keep
+ * the service worker alive until the async fetch completes).
+ */
+chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'deep_analysis') return;
+    port.onMessage.addListener(async (message) => {
+        if (message.type !== 'DEEP_ANALYSIS') return;
+        try {
+            const cached = getCachedResult(message.url);
+            if (cached) {
+                State.stats.cacheHits++;
+                persistStats();
+                port.postMessage({ success: true, data: cached, fromCache: true });
+                return;
+            }
+            if (!checkRateLimit()) {
+                port.postMessage({ success: false, error: 'Rate limit exceeded. Please wait a moment.' });
+                return;
+            }
+            const result = await callBackendAPI(message.url);
+            State.stats.totalScans++;
+            if (result.verdict === 'Malicious') State.stats.threatsBlocked++;
+            persistStats();
+            cacheResult(message.url, result);
+            port.postMessage({ success: true, data: result, fromCache: false });
+        } catch (error) {
+            port.postMessage({ success: false, error: error.message || 'Backend analysis failed' });
+        }
+    });
+});
+
+/**
+ * Handle one-shot messages from content scripts and popup.
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.type) {
-        case 'DEEP_ANALYSIS':
-            handleDeepAnalysis(message.url, sendResponse);
-            return true; // Async response
-
         case 'CACHE_RESULT':
             handleCacheResult(message.data);
             sendResponse({ success: true });
