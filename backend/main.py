@@ -15,8 +15,6 @@ import logging
 import json
 import hashlib
 import random
-import asyncio
-import threading
 from fnmatch import fnmatch
 
 import numpy as np
@@ -94,30 +92,9 @@ app.add_middleware(
 )
 
 
-def _watch_blocklist():
-    blocklist_path = os.path.join(MODELS_DIR, "server_blocklist.json")
-    last_mtime = None
-    while True:
-        try:
-            mtime = os.path.getmtime(blocklist_path)
-            if last_mtime is not None and mtime != last_mtime:
-                with open(blocklist_path, 'r') as f:
-                    new_data = json.load(f)
-                global server_blocklist
-                server_blocklist = new_data
-                count = len(new_data.get('blocked_domains', []))
-                logger.info("Blocklist reloaded (%d domains)", count)
-            last_mtime = mtime
-        except Exception as e:
-            logger.error("Blocklist watch error: %s", e)
-        threading.Event().wait(1)
-
-
 @app.on_event("startup")
 def startup():
     load_models()
-    t = threading.Thread(target=_watch_blocklist, daemon=True)
-    t.start()
 
 
 # ─── Request/Response Models ─────────────────────────────────────────────────
@@ -154,7 +131,14 @@ def _verdict_from_score(score: float) -> str:
 
 
 def _load_blocklist_realtime() -> dict | None:
-    return server_blocklist
+    blocklist_path = os.path.join(MODELS_DIR, "server_blocklist.json")
+    if os.path.exists(blocklist_path):
+        try:
+            with open(blocklist_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error("Failed to load blocklist: %s", e)
+    return None
 
 
 def _check_server_blocklist(url: str, domain: str) -> dict | None:
