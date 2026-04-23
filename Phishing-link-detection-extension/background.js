@@ -84,20 +84,14 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onMessage.addListener(async (message) => {
         if (message.type !== 'DEEP_ANALYSIS') return;
         try {
-            const cached = getCachedResult(message.url);
-            if (cached) {
-                State.stats.cacheHits++;
-                persistStats();
-                port.postMessage({ success: true, data: cached, fromCache: true });
-                return;
-            }
+            console.log('[Phishing Analyzer] Calling backend for:', message.url);
             const result = await callBackendAPI(message.url);
             State.stats.totalScans++;
             if (result.verdict === 'Malicious') State.stats.threatsBlocked++;
             persistStats();
-            cacheResult(message.url, result);
-            port.postMessage({ success: true, data: result, fromCache: false });
+            port.postMessage({ success: true, data: result });
         } catch (error) {
+            console.log('[Phishing Analyzer] Backend call failed for:', message.url, error.message);
             port.postMessage({ success: false, error: error.message || 'Backend analysis failed' });
         }
     });
