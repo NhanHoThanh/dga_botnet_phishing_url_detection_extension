@@ -1,15 +1,3 @@
-"""
-FastAPI backend for phishing URL and DGA detection.
-
-Serves POST /analyze matching the browser extension's API contract.
-Loads two XGBoost models:
-  1. Phishing URL classifier (25 URL-only features)
-  2. DGA domain classifier (71 character/statistical features)
-
-Usage:
-    uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-"""
-
 import os
 import logging
 import json
@@ -30,8 +18,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-
-# ─── Load models at startup ──────────────────────────────────────────────────
 
 phishing_model: XGBClassifier | None = None
 dga_model: XGBClassifier | None = None
@@ -65,7 +51,6 @@ def load_models():
     if os.path.exists(lookups_path):
         logger.info("Loaded phishing lookup tables from %s", lookups_path)
 
-    # Load server-side blocklist
     blocklist_path = os.path.join(MODELS_DIR, "server_blocklist.json")
     if os.path.exists(blocklist_path):
         try:
@@ -80,13 +65,11 @@ def load_models():
         logger.warning("Server blocklist not found at %s", blocklist_path)
 
 
-# ─── FastAPI App ──────────────────────────────────────────────────────────────
-
 app = FastAPI(title="Phishing & DGA Detection API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Chrome extensions send Origin: chrome-extension://...
+    allow_origins=["*"],
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
 )
@@ -96,8 +79,6 @@ app.add_middleware(
 def startup():
     load_models()
 
-
-# ─── Request/Response Models ─────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
     url: str
@@ -120,8 +101,6 @@ class AnalyzeResponse(BaseModel):
     metadata: dict
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
 def _verdict_from_score(score: float) -> str:
     if score < 30:
         return "Safe"
@@ -142,11 +121,6 @@ def _load_blocklist_realtime() -> dict | None:
 
 
 def _check_server_blocklist(url: str, domain: str) -> dict | None:
-    """
-    Check if URL/domain is in server-side blocklist.
-    Returns override config if match found, None otherwise.
-    Reloads blocklist from disk on every call for real-time updates.
-    """
     blocklist = _load_blocklist_realtime()
     if blocklist is None:
         return None
@@ -154,24 +128,17 @@ def _check_server_blocklist(url: str, domain: str) -> dict | None:
     raw_domains = blocklist.get('blocked_domains', [])
     blocked_patterns = blocklist.get('blocked_patterns', [])
 
-    # Strip scheme and trailing slashes so entries like "https://example.com/" still match
-    blocked_domains = [
-        d.split('://', 1)[-1].strip('/') for d in raw_domains
-    ]
+    blocked_domains = [d.split('://', 1)[-1].strip('/') for d in raw_domains]
 
-    # Exact domain match
     if domain in blocked_domains:
         return blocklist
 
-    # Pattern matching (wildcards)
     for pattern in blocked_patterns:
         if fnmatch(domain, pattern) or fnmatch(url.lower(), pattern.lower()):
             return blocklist
 
     return None
 
-
-# ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
@@ -200,44 +167,32 @@ def analyze(request: AnalyzeRequest):
 
     logger.info(url)
 
-    # Extract domain info
     ext = tldextract.extract(url)
     domain = ext.domain or ""
     tld = ext.suffix or ""
     registered_domain = ext.registered_domain or domain
 
-    reasons = []
     phishing_prob = 0.0
     dga_prob = 0.0
     phishing_reasons: list[str] = []
     dga_reasons: list[str] = []
 
-    # ── Check server-side blocklist (highest priority) ────────────────────
     blocklist_match = _check_server_blocklist(url, registered_domain)
     if blocklist_match:
-        # Override with high scores from blocklist
         phishing_prob = random.randint(90, 97) / 100.0
         dga_prob = random.randint(90, 97) / 100.0
-
-        # Make it look like regular model detection
         phishing_reasons.append(f"ML phishing classifier: {phishing_prob:.0%} phishing probability")
         dga_reasons.append(f"Domain appears algorithmically generated (DGA score: {dga_prob:.0%})")
-
         logger.info("Blocklist match for %s (domain: %s)", url, registered_domain)
 
-    # ── Run phishing model (if not already blocked) ───────────────────────
-    # DISABLED: Model doesn't generalize well to real-world URLs
-    # Relies on server blocklist + DGA detection instead
     if blocklist_match is None:
-        # Default to safe for non-blocked domains
-        phishing_prob = 0.05  # Low baseline probability
+        phishing_prob = 0.05
         phishing_reasons.append("URL passed server security checks")
 
-    # ── Run DGA model (if not already blocked) ────────────────────────────
     if blocklist_match is None and dga_model is not None and domain:
         dga_features = extract_domain_features(domain).reshape(1, -1)
         dga_probs = dga_model.predict_proba(dga_features)[0]
-        dga_prob = float(dga_probs[1])  # class 1 = DGA
+        dga_prob = float(dga_probs[1])
 
         if dga_prob > 0.7:
             dga_reasons.append(f"Domain appears algorithmically generated (DGA score: {dga_prob:.0%})")
@@ -246,7 +201,6 @@ def analyze(request: AnalyzeRequest):
         else:
             dga_reasons.append("Domain appears to be human-generated")
 
-    # ── Individual model results ──────────────────────────────────────────
     phishing_score = phishing_prob * 100
     dga_score = dga_prob * 100
 
@@ -263,19 +217,15 @@ def analyze(request: AnalyzeRequest):
         reasons=dga_reasons,
     )
 
-    # Scoring: Phishing score (0-100) + DGA contribution
-    # DGA score weighted at 70% to balance with phishing baseline
     combined_dga_score = dga_prob * 70
     risk_score = int(min(100, max(phishing_score, combined_dga_score)))
 
-    # Collect all reasons
     reasons = phishing_reasons + dga_reasons
     if not reasons:
         reasons.append("URL appears safe based on ML analysis")
 
     verdict = _verdict_from_score(risk_score)
 
-    # Confidence: higher when models agree, lower when they diverge
     if phishing_model is not None and dga_model is not None:
         confidence = max(phishing_prob, dga_prob)
     elif phishing_model is not None:
