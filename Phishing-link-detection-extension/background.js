@@ -5,18 +5,13 @@
 
 // Configuration
 const CONFIG = {
-    BACKEND_URL: 'http://localhost:8000', // Default backend URL (FastAPI)
-    RATE_LIMIT_WINDOW: 60000, // 1 minute in ms
-    RATE_LIMIT_MAX: 10, // Max requests per window
-    CACHE_TTL: 24 * 60 * 60 * 1000, // 24 hours
-    REQUEST_TIMEOUT: 15000 // 15 seconds
+    BACKEND_URL: 'http://localhost:8000',
+    CACHE_TTL: 24 * 60 * 60 * 1000,
+    REQUEST_TIMEOUT: 15000
 };
 
-// State
 const State = {
-    requestQueue: [], // Pending requests
-    requestTimes: [], // Timestamps of recent requests
-    cache: new Map(), // URL -> { result, timestamp }
+    cache: new Map(),
     stats: {
         totalScans: 0,
         threatsBlocked: 0,
@@ -94,10 +89,6 @@ chrome.runtime.onConnect.addListener((port) => {
                 State.stats.cacheHits++;
                 persistStats();
                 port.postMessage({ success: true, data: cached, fromCache: true });
-                return;
-            }
-            if (!checkRateLimit()) {
-                port.postMessage({ success: false, error: 'Rate limit exceeded. Please wait a moment.' });
                 return;
             }
             const result = await callBackendAPI(message.url);
@@ -220,8 +211,6 @@ async function callBackendAPI(url) {
             throw new Error('Invalid response format from backend');
         }
 
-        State.requestTimes.push(Date.now());
-
         return data;
 
     } catch (error) {
@@ -237,21 +226,6 @@ async function callBackendAPI(url) {
     }
 }
 
-/**
- * Check if request is within rate limit
- * @returns {boolean} True if within limit
- */
-function checkRateLimit() {
-    const now = Date.now();
-
-    // Remove old timestamps outside the window
-    State.requestTimes = State.requestTimes.filter(
-        time => now - time < CONFIG.RATE_LIMIT_WINDOW
-    );
-
-    // Check if under limit
-    return State.requestTimes.length < CONFIG.RATE_LIMIT_MAX;
-}
 
 /**
  * Get cached result if not expired
