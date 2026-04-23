@@ -130,11 +130,18 @@ def _check_server_blocklist(url: str, domain: str) -> dict | None:
 
     blocked_domains = [d.split('://', 1)[-1].strip('/') for d in raw_domains]
 
-    if domain in blocked_domains:
+    # Extract full hostname (e.g. yrfk.uk.com) in addition to registered domain
+    try:
+        from urllib.parse import urlparse
+        hostname = urlparse(url if '://' in url else 'http://' + url).hostname or ''
+    except Exception:
+        hostname = ''
+
+    if domain in blocked_domains or hostname in blocked_domains:
         return blocklist
 
     for pattern in blocked_patterns:
-        if fnmatch(domain, pattern) or fnmatch(url.lower(), pattern.lower()):
+        if fnmatch(domain, pattern) or fnmatch(hostname, pattern) or fnmatch(url.lower(), pattern.lower()):
             return blocklist
 
     return None
