@@ -22,7 +22,8 @@ const State = {
         threatsBlocked: 0,
         cacheHits: 0
     },
-    blocklistVersion: null
+    blocklistVersion: null,
+    serverOnline: false
 };
 
 /**
@@ -384,3 +385,32 @@ async function checkBlocklistVersion() {
 // Poll blocklist version every 60 seconds
 setInterval(checkBlocklistVersion, 60 * 1000);
 checkBlocklistVersion();
+
+/**
+ * Health check — polls /health every 5s and broadcasts server status to all tabs.
+ */
+async function runHealthCheck() {
+    let online = false;
+    try {
+        const response = await fetch(`${CONFIG.BACKEND_URL}/health`, {
+            signal: AbortSignal.timeout(4000)
+        });
+        online = response.ok;
+    } catch {
+        online = false;
+    }
+
+    State.serverOnline = online;
+
+    chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+            chrome.tabs.sendMessage(tab.id, {
+                type: 'SERVER_STATUS',
+                online
+            }).catch(() => {});
+        }
+    });
+}
+
+setInterval(runHealthCheck, 5000);
+runHealthCheck();

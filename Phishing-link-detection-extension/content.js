@@ -16,6 +16,7 @@ const State = {
     analyzedLinks: new Map(), // URL -> analysis result
     activeTooltip: null,
     hoverTimeout: null,
+    serverOnline: false,
     settings: {
         fastOnlyMode: false,
         fullAnalysis: true,
@@ -774,6 +775,8 @@ function escapeHTML(text) {
     if (message.type === 'UPDATE_SETTINGS') {
         State.settings = { ...State.settings, ...message.settings };
         sendResponse({ success: true });
+    } else if (message.type === 'SERVER_STATUS') {
+        State.serverOnline = message.online;
     }
 });
 
