@@ -270,10 +270,8 @@ function handleMonitoredClick(event) {
     const url = extractURLFromElement(element);
     if (!url) return;
 
-    // Check blocklist and fast detector
-    const blocked = checkBlocklist(url);
-    if (blocked || (State.analyzedLinks.has(url) && State.analyzedLinks.get(url).verdict === 'malicious')) {
-        const result = blocked || State.analyzedLinks.get(url);
+    if (State.analyzedLinks.has(url) && State.analyzedLinks.get(url).verdict === 'malicious') {
+        const result = State.analyzedLinks.get(url);
         const confirmed = confirm(
             `WARNING\n\n` +
             `This link appears to be MALICIOUS!\n` +
@@ -369,14 +367,6 @@ async function analyzeElement(element, forceDeep = false) {
 
     if (!url) return;
 
-    // Always run blocklist check (overrides cache)
-    const blockedResult = checkBlocklist(url);
-    if (blockedResult) {
-        State.analyzedLinks.set(url, blockedResult);
-        applyVisualFeedback(element, blockedResult);
-        return;
-    }
-
     // Check cache
     if (State.analyzedLinks.has(url)) {
         const cached = State.analyzedLinks.get(url);
@@ -412,11 +402,8 @@ async function analyzeElement(element, forceDeep = false) {
     // Apply initial visual feedback
     applyVisualFeedback(element, finalResult);
 
-    // Step 2: Decide if deep analysis is needed
-    const needsDeepAnalysis = forceDeep ||
-        (State.settings.fullAnalysis &&
-            fastResult.quick_score >= 30 &&
-            !State.settings.fastOnlyMode);
+    // Step 2: Always call backend for deep analysis
+    const needsDeepAnalysis = true;
 
     if (needsDeepAnalysis && !isAd) { // Skip deep analysis for known ads
         try {
