@@ -30,7 +30,6 @@
       ],
       "js": [
         "browser-polyfill.js",
-        "fast-detector.js",
         "content.js"
       ],
       "css": [
