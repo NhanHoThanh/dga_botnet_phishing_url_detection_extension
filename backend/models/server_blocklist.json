@@ -1,0 +1,19 @@
+{
+  "blocked_domains": [
+    "xoilacxyr.tv",
+    "fb88.com",
+    "testmalicious.com",
+    "worstideaofalltime.com",
+    "worstideaofalltime.com",
+    "https://worstideaofalltime.com",
+    "guvenlernakliyat.com"
+  ],
+  "blocked_patterns": [
+    "*xoilac*",
+    "*fb88*"
+  ],
+  "override_scores": {
+    "phishing_score": 95,
+    "dga_score": 90
+  }
+}

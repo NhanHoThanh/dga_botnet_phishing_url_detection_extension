@@ -21,7 +21,8 @@ const State = {
         totalScans: 0,
         threatsBlocked: 0,
         cacheHits: 0
-    }
+    },
+    blocklistVersion: null
 };
 
 /**
@@ -358,3 +359,28 @@ initialize();
 
 // Periodic cache cleanup (every hour)
 setInterval(cleanExpiredCache, 60 * 60 * 1000);
+
+/**
+ * Poll backend for blocklist version changes and clear URL cache if updated.
+ */
+async function checkBlocklistVersion() {
+    try {
+        const response = await fetch(`${CONFIG.BACKEND_URL}/blocklist/version`, {
+            signal: AbortSignal.timeout(5000)
+        });
+        if (!response.ok) return;
+        const { version } = await response.json();
+        if (State.blocklistVersion !== null && version !== State.blocklistVersion) {
+            console.log('[Phishing Analyzer] Blocklist updated — clearing URL cache');
+            State.cache.clear();
+            persistCache();
+        }
+        State.blocklistVersion = version;
+    } catch {
+        // Backend unreachable, skip silently
+    }
+}
+
+// Poll blocklist version every 60 seconds
+setInterval(checkBlocklistVersion, 60 * 1000);
+checkBlocklistVersion();
