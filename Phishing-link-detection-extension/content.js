@@ -370,13 +370,6 @@ async function analyzeElement(element, forceDeep = false) {
 
     console.log(url);
 
-    // Check cache
-    if (State.analyzedLinks.has(url)) {
-        const cached = State.analyzedLinks.get(url);
-        applyVisualFeedback(element, cached);
-        return;
-    }
-
     // Check if this is an ad
     const isAd = element.dataset.isAd === 'true' ||
         element.closest('[aria-label*="Ad"]') ||
