@@ -9,7 +9,7 @@ const CONFIG = {
     RATE_LIMIT_WINDOW: 60000, // 1 minute in ms
     RATE_LIMIT_MAX: 10, // Max requests per window
     CACHE_TTL: 24 * 60 * 60 * 1000, // 24 hours
-    REQUEST_TIMEOUT: 10000 // 10 seconds
+    REQUEST_TIMEOUT: 15000 // 15 seconds
 };
 
 // State
@@ -172,9 +172,6 @@ async function handleDeepAnalysis(url, sendResponse) {
  * @returns {Promise<object>} Analysis result
  */
 async function callBackendAPI(url) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT);
-
     try {
         const response = await fetch(`${CONFIG.BACKEND_URL}/analyze`, {
             method: 'POST',
@@ -182,10 +179,8 @@ async function callBackendAPI(url) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({ url }),
-            signal: controller.signal
+            signal: AbortSignal.timeout(CONFIG.REQUEST_TIMEOUT)
         });
-
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
             throw new Error(`Backend returned ${response.status}: ${response.statusText}`);
@@ -193,20 +188,16 @@ async function callBackendAPI(url) {
 
         const data = await response.json();
 
-        // Validate response format
         if (!data.verdict || typeof data.risk_score !== 'number') {
             throw new Error('Invalid response format from backend');
         }
 
-        // Record request time for rate limiting
         State.requestTimes.push(Date.now());
 
         return data;
 
     } catch (error) {
-        clearTimeout(timeoutId);
-
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || error.name === 'TimeoutError') {
             throw new Error('Backend request timed out');
         }
 
